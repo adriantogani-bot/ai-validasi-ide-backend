@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
@@ -10,17 +11,20 @@ app.get("/", (req, res) => {
 });
 
 app.post("/validate-idea", (req, res) => {
-  const { idea } = req.body;
-  console.log("Sending idea:", idea);
-  res.json({ result: `Ide "${idea}" diterima` });
+  try {
+    const { idea } = req.body;
+    console.log("Sending idea:", idea);
+
+    res.json({
+      result: `Ide "${idea}" diterima`
+    });
+  } catch (err) {
+    console.error("ERROR validate-idea:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 });
-} catch (err) {
-  console.error(err);
-  setResult("❌ Gagal menghubungi backend");
-}
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("Server running on port", PORT);
 });
-
