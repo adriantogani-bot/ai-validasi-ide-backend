@@ -1,6 +1,12 @@
 import express from "express";
 import cors from "cors";
 
+console.log("OPENAI KEY exists:", !!
+process.env.OPENAI_API_KEY);
+
+console.log("ENV KEYS:", 
+Object.keys(process.env));
+
 const app = express();
 
 app.use(cors());
