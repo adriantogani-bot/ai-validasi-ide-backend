@@ -1,8 +1,10 @@
 import express from "express";
 import cors from "cors";
+import OpenAI from "openai";
 
-console.log("OPENAI KEY exists:", !!
-process.env.OPENAI_API_KEY);
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 console.log("ENV KEYS:", 
 Object.keys(process.env));
@@ -11,6 +13,9 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+console.log("OPENAI KEY exists:", !!
+process.env.OPENAI_API_KEY);
 
 app.get("/", (req, res) => {
   res.send("Backend OK");
@@ -21,12 +26,29 @@ app.post("/validate-idea", (req, res) => {
     const { idea } = req.body;
     console.log("Sending idea:", idea);
 
-    res.json({
-      result: `Ide "${idea}" diterima`
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "Kamu adalah analis bisnis yang kritis dan jujur."
+        },
+        {
+          role: "user",
+          content: `Tolong validasi ide bisnis berikut secara singkat:\n${idea}`
+        }
+      ],
     });
+
+    res.json({
+      result: response.choices[0].message.content
+    });
+
   } catch (err) {
-    console.error("ERROR validate-idea:", err);
-    res.status(500).json({ error: "Internal Server Error" });
+    console.error("OpenAI error:", err.message);
+    res.status(500).json({
+      error: "Gagal memproses ide dengan AI"
+    });
   }
 });
 
