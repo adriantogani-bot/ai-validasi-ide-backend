@@ -1,102 +1,106 @@
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import OpenAI from "openai";
 
-dotenv.config();
-
 const app = express();
-const PORT = process.env.PORT || 3000;
-
-/* ===============================
-   MIDDLEWARE (WAJIB URUTAN INI)
-================================ */
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST"],
-  allowedHeaders: ["Content-Type"]
-}));
-
-app.use(express.json({ limit: "1mb" }));
-
-/* ===============================
-   OPENAI CLIENT
-================================ */
-if (!process.env.OPENAI_API_KEY) {
-  console.error("❌ OPENAI_API_KEY TIDAK ADA");
-}
+app.use(cors());
+app.use(express.json());
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
-/* ===============================
-   HEALTH CHECK
-================================ */
-app.get("/", (req, res) => {
-  res.json({
-    status: "OK",
-    message: "Backend AI Validasi Ide aktif"
-  });
-});
-
-/* ===============================
-   ANALYZE ENDPOINT (INI YANG DIPAKAI FRONTEND)
-================================ */
-app.post("/api/analyze", async (req, res) => {
+/**
+ * STEP 1: Generate Draft (Ringkasan, Masalah, Target)
+ */
+app.post("/draft", async (req, res) => {
   try {
-    const { idea } = req.body;
-
-    if (!idea || idea.trim().length < 10) {
-      return res.status(400).json({
-        error: "Ide bisnis terlalu pendek"
-      });
-    }
+    const { idea, location, target, price } = req.body;
 
     const prompt = `
-Anda adalah konsultan bisnis UMKM Indonesia.
+Anda adalah analis bisnis UMKM Indonesia.
 
-Analisis ide bisnis berikut secara mendalam dan praktis:
+Buatkan DRAFT AWAL dalam format JSON dengan struktur:
+{
+  "ringkasan_ide": "...",
+  "masalah_yang_disediakan": "...",
+  "target_pasar": "..."
+}
 
-"${idea}"
+Ide Bisnis:
+- Ide: ${idea}
+- Lokasi: ${location}
+- Target awal: ${target}
+- Harga: ${price}
 
-Gunakan struktur berikut:
-
-1. Ringkasan Ide
-2. Masalah yang Diselesaikan
-3. Target Pasar
-4. Keunggulan & Diferensiasi
-5. Risiko Utama
-6. Validasi Cepat (MVP)
-7. Rekomendasi Aksi Nyata (Call To Action)
-
-Gunakan bahasa Indonesia yang jelas, lugas, dan aplikatif.
+Gunakan bahasa lugas dan mudah dipahami UMKM.
 `;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: "Anda adalah konsultan bisnis berpengalaman." },
-        { role: "user", content: prompt }
-      ],
-      temperature: 0.7
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.4,
     });
 
-    const result = completion.choices[0].message.content;
-
-    return res.json({ result });
-
-  } catch (error) {
-    console.error("❌ ERROR ANALYZE:", error.message);
-    return res.status(500).json({
-      error: "Gagal memproses analisis AI"
-    });
+    const text = completion.choices[0].message.content;
+    res.json({ draft: text });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Gagal membuat draft" });
   }
 });
 
-/* ===============================
-   START SERVER
-================================ */
+/**
+ * STEP 2: Final Analysis (SETELAH DISETUJUI USER)
+ */
+app.post("/analyze-final", async (req, res) => {
+  try {
+    const { ringkasan, masalah, target } = req.body;
+
+    const prompt = `
+Anda adalah konsultan bisnis UMKM senior.
+
+Lakukan ANALISA MENDALAM berdasarkan poin yang SUDAH DISETUJUI user berikut:
+
+Ringkasan Ide:
+${ringkasan}
+
+Masalah yang Diselesaikan:
+${masalah}
+
+Target Pasar:
+${target}
+
+Berikan:
+1. Analisis pasar
+2. Analisis kompetitor
+3. Risiko utama
+4. Rekomendasi aksi
+5. Call To Action (apa langkah berikutnya)
+
+Gunakan bahasa lugas, jujur, dan praktis.
+`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.5,
+    });
+
+    res.json({
+      analysis: completion.choices[0].message.content,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Gagal analisa final" });
+  }
+});
+
+app.get("/", (req, res) => {
+  res.send("Backend Approval Flow Aktif");
+});
+
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Backend running on port ${PORT}`);
+  console.log("Backend running on port", PORT);
 });
