@@ -3,183 +3,108 @@ import cors from "cors";
 import OpenAI from "openai";
 
 const app = express();
+const PORT = process.env.PORT || 10000;
+
+// ===== Middleware =====
 app.use(cors());
 app.use(express.json());
 
-const client = new OpenAI({
+// ===== Debug awal =====
+console.log("🚀 Server starting...");
+console.log("🔑 OPENAI KEY exists:", !!process.env.OPENAI_API_KEY);
+
+// ===== OpenAI Client =====
+const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// ==========================
-// PROMPT TEMPLATES
-// ==========================
+// ===== Health Check =====
+app.get("/", (req, res) => {
+  res.json({
+    status: "OK",
+    message: "AI Validasi Ide Backend is running",
+  });
+});
 
-// 1️⃣ SYSTEM PROMPT (ROLE)
-const SYSTEM_PROMPT = `
-Anda adalah analis bisnis UMKM Indonesia dengan pengalaman lebih dari 15 tahun.
-Anda berpikir kritis, realistis, dan tidak menjual mimpi.
-
-Gunakan bahasa Indonesia yang lugas, mudah dipahami, dan praktis.
-Hindari istilah akademik dan jargon konsultan.
-
-Tujuan Anda adalah membantu user mengambil keputusan bisnis,
-bukan menyenangkan atau memotivasi secara berlebihan.
-`;
-
-// 2️⃣ STEP 1 – PEMAHAMAN IDE
-function promptStep1(input) {
-  return `
-Pahami ide bisnis berikut secara objektif.
-
-Ide bisnis:
-- Produk/Jasa: ${input.idea}
-- Lokasi: ${input.location}
-- Target Konsumen: ${input.target}
-- Harga: ${input.price}
-
-Tugas:
-Ringkas ide bisnis ini dalam 3–4 kalimat.
-Sebutkan dengan jelas:
-- Produk apa
-- Untuk siapa
-- Masalah apa yang ingin diselesaikan
-`;
-}
-
-// 3️⃣ STEP 2 – ANALISIS PASAR & PERSAINGAN
-function promptStep2(summary) {
-  return `
-Berikut ringkasan ide bisnis:
-${summary}
-
-Analisis:
-1. Kondisi permintaan pasar secara umum
-2. Tingkat persaingan (rendah / sedang / tinggi)
-3. Hambatan masuk untuk pemain baru
-
-Jawab dengan poin-poin singkat.
-`;
-}
-
-// 4️⃣ STEP 3 – RISIKO & KELEMAHAN
-function promptStep3(summary) {
-  return `
-Berdasarkan ide bisnis berikut:
-${summary}
-
-Identifikasi:
-- Risiko utama dalam 3 bulan pertama
-- Kesalahan umum yang sering dilakukan pemula
-- Faktor yang bisa menyebabkan usaha gagal
-
-Gunakan bahasa tegas dan jujur.
-`;
-}
-
-// 5️⃣ STEP 4 – REKOMENDASI & KEPUTUSAN
-function promptStep4(summary, market, risks) {
-  return `
-Gunakan informasi berikut:
-
-RINGKASAN IDE:
-${summary}
-
-ANALISIS PASAR:
-${market}
-
-RISIKO:
-${risks}
-
-Tugas akhir:
-1. Tentukan status ide:
-   - Layak
-   - Layak dengan Catatan
-   - Kurang Layak
-2. Berikan skor potensi pasar (0–100)
-3. Berikan 3 rekomendasi aksi paling realistis
-4. Jika perlu, sarankan pivot paling logis
-
-Jawab terstruktur dan ringkas.
-`;
-}
-
-// ==========================
-// API ENDPOINT
-// ==========================
-
-app.post("/validate-idea", async (req, res) => {
+// ===== MAIN ANALYSIS ENDPOINT =====
+app.post("/analyze", async (req, res) => {
   try {
-    const input = req.body;
+    const { idea } = req.body;
 
-    // DEBUG CEPAT
-    console.log("📩 Input diterima:", input);
+    if (!idea || idea.trim().length < 10) {
+      return res.status(400).json({
+        error: "Ide bisnis terlalu pendek",
+      });
+    }
 
-    // STEP 1
-    const step1 = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+    console.log("📥 Idea received:", idea);
+
+    // ===== PROMPT BERJENJANG =====
+    const prompt = `
+Anda adalah konsultan bisnis senior.
+
+Analisis ide bisnis berikut secara TAJAM dan STRUKTURAL:
+
+IDE BISNIS:
+"${idea}"
+
+Berikan analisis dengan format berikut:
+
+### 1. Ringkasan Kelayakan
+(1 paragraf singkat)
+
+### 2. Masalah Nyata yang Diselesaikan
+- poin-poin jelas
+
+### 3. Target Pasar
+- Segmen utama
+- Daya beli
+- Perilaku
+
+### 4. Keunggulan Utama
+- Differentiator
+- Value proposition
+
+### 5. Risiko & Tantangan
+- Operasional
+- Pasar
+- Regulasi
+
+### 6. Validasi Cepat (MVP)
+- Cara uji pasar dalam 30 hari
+
+Gunakan bahasa Indonesia yang lugas dan profesional.
+`;
+
+    // ===== OpenAI Call =====
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4.1-mini",
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: promptStep1(input) },
+        { role: "system", content: "Anda adalah analis bisnis profesional." },
+        { role: "user", content: prompt },
       ],
+      temperature: 0.6,
     });
 
-    const summary = step1.choices[0].message.content;
+    const result = completion.choices[0].message.content;
 
-    // STEP 2
-    const step2 = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: promptStep2(summary) },
-      ],
-    });
-
-    const marketAnalysis = step2.choices[0].message.content;
-
-    // STEP 3
-    const step3 = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: promptStep3(summary) },
-      ],
-    });
-
-    const riskAnalysis = step3.choices[0].message.content;
-
-    // STEP 4 (FINAL OUTPUT)
-    const step4 = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: promptStep4(summary, marketAnalysis, riskAnalysis),
-        },
-      ],
-    });
-
-    const finalResult = step4.choices[0].message.content;
+    console.log("✅ Analysis generated");
 
     res.json({
-      summary,
-      marketAnalysis,
-      riskAnalysis,
-      finalResult,
+      success: true,
+      result,
     });
   } catch (error) {
-    console.error("❌ Failed to call OpenAI:", error);
+    console.error("❌ ERROR:", error.message);
+
     res.status(500).json({
-      error: "Failed to analyze business idea",
+      error: "Gagal menganalisis ide",
+      detail: error.message,
     });
   }
 });
 
-// ==========================
-// SERVER START
-// ==========================
-
-const PORT = process.env.PORT || 3000;
+// ===== Start Server =====
 app.listen(PORT, () => {
-  console.log(`🚀 Backend running on port ${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });
