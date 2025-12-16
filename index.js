@@ -3,29 +3,27 @@ import cors from "cors";
 import OpenAI from "openai";
 
 const app = express();
-const PORT = process.env.PORT || 10000;
+const port = process.env.PORT || 10000;
 
-// ===== MIDDLEWARE =====
+// ✅ CORS WAJIB (INI KRUSIAL)
 app.use(cors({
-  origin: "*",
+  origin: "*", // sementara pakai wildcard dulu
   methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type"]
 }));
+
 app.use(express.json());
 
-// ===== DEBUG ENV =====
-console.log("OPENAI KEY exists:", !!process.env.OPENAI_API_KEY);
-
-// ===== OPENAI CLIENT =====
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY
 });
 
-// ===== HEALTH CHECK =====
+// Health check
 app.get("/", (req, res) => {
-  res.send("AI Validasi Ide Backend is running 🚀");
+  res.send("Backend is running");
 });
 
-// ===== MAIN ANALYSIS ENDPOINT =====
+// ANALYZE ROUTE
 app.post("/analyze", async (req, res) => {
   try {
     const { idea } = req.body;
@@ -37,41 +35,35 @@ app.post("/analyze", async (req, res) => {
     const prompt = `
 Anda adalah analis bisnis profesional.
 
-Lakukan analisis kelayakan ide bisnis berikut secara TERSTRUKTUR dan TAJAM:
+Analisis ide bisnis berikut secara tajam dan terstruktur:
 
-Ide bisnis:
 "${idea}"
 
-Gunakan format berikut:
-
-### 1. Masalah yang Diselesaikan
-### 2. Target Pasar
-### 3. Keunggulan Utama
-### 4. Risiko & Tantangan
-### 5. Validasi Cepat (MVP)
-### 6. Rekomendasi Langkah Selanjutnya
+Gunakan format:
+1. Riset Pasar
+2. Segmentasi Pasar
+3. Keunggulan Kompetitif
+4. Risiko & Tantangan
+5. Strategi MVP
+6. Rekomendasi Langkah Selanjutnya
 `;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: "Anda adalah analis bisnis berpengalaman." },
-        { role: "user", content: prompt }
-      ],
-      temperature: 0.7,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7
     });
 
-    const result = completion.choices[0].message.content;
-
-    res.json({ result });
+    res.json({
+      result: completion.choices[0].message.content
+    });
 
   } catch (error) {
-    console.error("ANALYZE ERROR:", error);
-    res.status(500).json({ error: "Failed to analyze idea" });
+    console.error("ERROR:", error);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
-// ===== START SERVER =====
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });
