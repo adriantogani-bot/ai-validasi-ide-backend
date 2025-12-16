@@ -5,25 +5,24 @@ import OpenAI from "openai";
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// ===== Middleware =====
-app.use(cors());
+// ===== MIDDLEWARE =====
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST"],
+}));
 app.use(express.json());
 
-// ===== Debug awal =====
-console.log("🚀 Server starting...");
-console.log("🔑 OPENAI KEY exists:", !!process.env.OPENAI_API_KEY);
+// ===== DEBUG ENV =====
+console.log("OPENAI KEY exists:", !!process.env.OPENAI_API_KEY);
 
-// ===== OpenAI Client =====
+// ===== OPENAI CLIENT =====
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// ===== Health Check =====
+// ===== HEALTH CHECK =====
 app.get("/", (req, res) => {
-  res.json({
-    status: "OK",
-    message: "AI Validasi Ide Backend is running",
-  });
+  res.send("AI Validasi Ide Backend is running 🚀");
 });
 
 // ===== MAIN ANALYSIS ENDPOINT =====
@@ -31,80 +30,48 @@ app.post("/analyze", async (req, res) => {
   try {
     const { idea } = req.body;
 
-    if (!idea || idea.trim().length < 10) {
-      return res.status(400).json({
-        error: "Ide bisnis terlalu pendek",
-      });
+    if (!idea) {
+      return res.status(400).json({ error: "Idea is required" });
     }
 
-    console.log("📥 Idea received:", idea);
-
-    // ===== PROMPT BERJENJANG =====
     const prompt = `
-Anda adalah konsultan bisnis senior.
+Anda adalah analis bisnis profesional.
 
-Analisis ide bisnis berikut secara TAJAM dan STRUKTURAL:
+Lakukan analisis kelayakan ide bisnis berikut secara TERSTRUKTUR dan TAJAM:
 
-IDE BISNIS:
+Ide bisnis:
 "${idea}"
 
-Berikan analisis dengan format berikut:
+Gunakan format berikut:
 
-### 1. Ringkasan Kelayakan
-(1 paragraf singkat)
-
-### 2. Masalah Nyata yang Diselesaikan
-- poin-poin jelas
-
-### 3. Target Pasar
-- Segmen utama
-- Daya beli
-- Perilaku
-
-### 4. Keunggulan Utama
-- Differentiator
-- Value proposition
-
-### 5. Risiko & Tantangan
-- Operasional
-- Pasar
-- Regulasi
-
-### 6. Validasi Cepat (MVP)
-- Cara uji pasar dalam 30 hari
-
-Gunakan bahasa Indonesia yang lugas dan profesional.
+### 1. Masalah yang Diselesaikan
+### 2. Target Pasar
+### 3. Keunggulan Utama
+### 4. Risiko & Tantangan
+### 5. Validasi Cepat (MVP)
+### 6. Rekomendasi Langkah Selanjutnya
 `;
 
-    // ===== OpenAI Call =====
     const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
+      model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: "Anda adalah analis bisnis profesional." },
-        { role: "user", content: prompt },
+        { role: "system", content: "Anda adalah analis bisnis berpengalaman." },
+        { role: "user", content: prompt }
       ],
-      temperature: 0.6,
+      temperature: 0.7,
     });
 
     const result = completion.choices[0].message.content;
 
-    console.log("✅ Analysis generated");
+    res.json({ result });
 
-    res.json({
-      success: true,
-      result,
-    });
   } catch (error) {
-    console.error("❌ ERROR:", error.message);
-
-    res.status(500).json({
-      error: "Gagal menganalisis ide",
-      detail: error.message,
-    });
+    console.error("ANALYZE ERROR:", error);
+    res.status(500).json({ error: "Failed to analyze idea" });
   }
 });
 
-// ===== Start Server =====
+// ===== START SERVER =====
 app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
