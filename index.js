@@ -1,71 +1,106 @@
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
-import OpenAI from "openai";
-
-dotenv.config();
+import fetch from "node-fetch";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
+// =======================
+// MIDDLEWARE
+// =======================
 app.use(cors());
 app.use(express.json());
 
-// Health check (WAJIB ADA)
+// =======================
+// HEALTH CHECK
+// =======================
 app.get("/", (req, res) => {
-  res.json({ status: "Backend OK" });
+  res.send("Backend AI Validasi Ide Aktif");
 });
 
-// === API ANALYZE (INI YANG TADI HILANG) ===
+// =======================
+// ANALYZE ENDPOINT (FINAL)
+// =======================
 app.post("/api/analyze", async (req, res) => {
   try {
-    const { idea } = req.body;
+    const { idea, approvedSummary, approvedProblems, approvedTarget } = req.body;
 
-    if (!idea || idea.trim() === "") {
+    if (!idea) {
       return res.status(400).json({ error: "Idea is required" });
     }
 
-    const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-
+    // =======================
+    // PROMPT BERJENJANG + CTA
+    // =======================
     const prompt = `
-Anda adalah konsultan bisnis UMKM Indonesia.
+Anda adalah konsultan bisnis UMKM Indonesia yang sangat kritis dan praktis.
 
-Analisis ide bisnis berikut secara mendalam dan praktis:
+Gunakan informasi berikut:
 
-"${idea}"
+IDE AWAL:
+${idea}
 
-Berikan output dengan struktur:
-1. Ringkasan Ide
-2. Masalah yang Diselesaikan
-3. Target Pasar
+${approvedSummary ? `RINGKASAN IDE DISETUJUI USER:\n${approvedSummary}` : ""}
+${approvedProblems ? `MASALAH YANG DISETUJUI USER:\n${approvedProblems}` : ""}
+${approvedTarget ? `TARGET PASAR DISETUJUI USER:\n${approvedTarget}` : ""}
+
+Tugas Anda:
+
+1. Ringkasan Ide (jelas, 3–4 kalimat)
+2. Masalah Utama yang Diselesaikan (bullet points)
+3. Target Pasar Spesifik (siapa, daya beli, perilaku)
 4. Keunggulan & Diferensiasi
-5. Risiko & Tantangan
-6. Rekomendasi Langkah Nyata (CTA 30 hari)
+5. Risiko & Tantangan Nyata
+6. Validasi Cepat (MVP 14–30 hari)
+7. Rekomendasi Aksi Nyata (Call To Action):
+   - Langkah 7 hari
+   - Langkah 30 hari
+   - Indikator lanjut / berhenti
+
+Gunakan bahasa Indonesia yang lugas, bukan teori.
 `;
 
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: "Anda adalah analis bisnis profesional." },
-        { role: "user", content: prompt }
-      ],
-      temperature: 0.7
+    // =======================
+    // CALL OPENAI API
+    // =======================
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "Anda adalah analis bisnis UMKM." },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.7,
+      }),
     });
 
+    const data = await response.json();
+
+    if (!data.choices || !data.choices[0]) {
+      throw new Error("No response from OpenAI");
+    }
+
     res.json({
-      result: completion.choices[0].message.content
+      result: data.choices[0].message.content,
     });
 
   } catch (error) {
-    console.error("AI ERROR:", error);
-    res.status(500).json({ error: "AI processing failed" });
+    console.error("ERROR ANALYZE:", error);
+    res.status(500).json({
+      error: "Gagal memproses analisis",
+      detail: error.message,
+    });
   }
 });
 
+// =======================
 // START SERVER
+// =======================
 app.listen(PORT, () => {
-  console.log("Backend running on port", PORT);
+  console.log(`Backend running on port ${PORT}`);
 });
