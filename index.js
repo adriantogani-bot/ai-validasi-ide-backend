@@ -1,18 +1,25 @@
 import express from "express";
 import cors from "cors";
+import OpenAI from "openai";
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
 app.use(cors());
 app.use(express.json());
 
-// 🔴 ROUTE TEST (WAJIB ADA)
-app.get("/", (req, res) => {
-  res.send("Backend OK");
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
-// 🔴 ROUTE ANALYZE (INI YANG DIPANGGIL)
+/**
+ * TEST ROUTE (WAJIB ADA)
+ */
+app.get("/", (req, res) => {
+  res.json({ status: "Backend OK" });
+});
+
+/**
+ * ANALYZE ROUTE (INI YANG DIPAKAI FRONTEND)
+ */
 app.post("/analyze", async (req, res) => {
   try {
     const { idea } = req.body;
@@ -21,19 +28,43 @@ app.post("/analyze", async (req, res) => {
       return res.status(400).json({ error: "Idea is required" });
     }
 
-    // MOCK dulu (jangan OpenAI dulu)
-    res.json({
-      status: "Layak dengan Catatan",
-      score: 72,
-      summary: `Analisis untuk ide: ${idea}`,
+    const prompt = `
+Anda adalah analis bisnis startup.
+Analisis ide bisnis berikut secara tajam dan terstruktur:
+
+IDE:
+"${idea}"
+
+Berikan output dengan format:
+1. Ringkasan Ide
+2. Masalah yang Diselesaikan
+3. Target Pasar
+4. Keunggulan & Diferensiasi
+5. Risiko Utama
+6. Rekomendasi MVP (30 hari)
+`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7,
     });
 
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+    const result = completion.choices[0].message.content;
+
+    // 🔥 PENTING: return HARUS field "result"
+    res.json({ result });
+
+  } catch (error) {
+    console.error("ANALYZE ERROR:", error);
+    res.status(500).json({
+      error: "AI processing failed",
+      detail: error.message,
+    });
   }
 });
 
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("Backend running on port", PORT);
+  console.log("Server running on port", PORT);
 });
