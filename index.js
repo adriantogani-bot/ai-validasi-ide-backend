@@ -3,6 +3,8 @@ import cors from "cors";
 import OpenAI from "openai";
 
 const app = express();
+const port = process.env.PORT || 3000;
+
 app.use(cors());
 app.use(express.json());
 
@@ -10,61 +12,130 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-/**
- * TEST ROUTE (WAJIB ADA)
- */
+/* =========================
+   HEALTH CHECK
+========================= */
 app.get("/", (req, res) => {
-  res.json({ status: "Backend OK" });
+  res.json({ status: "Backend AI Validasi Ide - OK" });
 });
 
-/**
- * ANALYZE ROUTE (INI YANG DIPAKAI FRONTEND)
- */
-app.post("/analyze", async (req, res) => {
+/* =========================
+   STEP 1: GENERATE DRAFT
+========================= */
+app.post("/draft", async (req, res) => {
   try {
-    const { idea } = req.body;
+    const { idea, location } = req.body;
 
-    if (!idea) {
-      return res.status(400).json({ error: "Idea is required" });
+    if (!idea || !location) {
+      return res.status(400).json({
+        error: "idea dan location wajib diisi",
+      });
     }
 
     const prompt = `
-Anda adalah analis bisnis startup.
-Analisis ide bisnis berikut secara tajam dan terstruktur:
+Anda adalah analis bisnis UMKM Indonesia.
 
-IDE:
-"${idea}"
+Buatkan DRAF AWAL (belum analisis mendalam) berdasarkan ide berikut:
 
-Berikan output dengan format:
-1. Ringkasan Ide
-2. Masalah yang Diselesaikan
-3. Target Pasar
-4. Keunggulan & Diferensiasi
-5. Risiko Utama
-6. Rekomendasi MVP (30 hari)
-`;
+Ide Bisnis:
+${idea}
+
+Lokasi Target:
+${location}
+
+Output HARUS dalam format JSON dengan struktur:
+{
+  "ringkasan": "...",
+  "masalah": "...",
+  "targetPasar": "..."
+}
+
+Gunakan bahasa Indonesia yang lugas, sederhana, dan realistis.
+    `;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
+      temperature: 0.4,
     });
 
-    const result = completion.choices[0].message.content;
+    const text = completion.choices[0].message.content;
 
-    // 🔥 PENTING: return HARUS field "result"
-    res.json({ result });
+    // parsing aman
+    const jsonStart = text.indexOf("{");
+    const jsonEnd = text.lastIndexOf("}");
+    const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
 
+    res.json(parsed);
   } catch (error) {
-    console.error("ANALYZE ERROR:", error);
-    res.status(500).json({
-      error: "AI processing failed",
-      detail: error.message,
-    });
+    console.error("Draft error:", error);
+    res.status(500).json({ error: "Gagal membuat draft AI" });
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
+/* =========================
+   STEP 2: FINAL ANALYSIS
+========================= */
+app.post("/analyze", async (req, res) => {
+  try {
+    const { ringkasan, masalah, targetPasar } = req.body;
+
+    if (!ringkasan || !masalah || !targetPasar) {
+      return res.status(400).json({
+        error: "ringkasan, masalah, dan targetPasar wajib diisi",
+      });
+    }
+
+    const prompt = `
+Anda adalah analis bisnis senior UMKM Indonesia.
+
+Berikut adalah versi FINAL yang SUDAH DISETUJUI USER:
+
+Ringkasan Ide:
+${ringkasan}
+
+Masalah yang Diselesaikan:
+${masalah}
+
+Target Pasar:
+${targetPasar}
+
+Lakukan ANALISIS MENDALAM dan berikan output TERSTRUKTUR
+dengan format JSON berikut:
+
+{
+  "statusKelayakan": "Layak / Layak dengan Catatan / Tidak Layak",
+  "skorPotensi": 0-100,
+  "analisisPasar": "...",
+  "analisisPersaingan": "...",
+  "risikoUtama": ["...", "..."],
+  "rekomendasiStrategis": ["...", "..."],
+  "callToAction": "Langkah konkret yang harus dilakukan user selanjutnya"
+}
+
+Gunakan bahasa jujur, tidak menghibur, dan fokus pada keputusan bisnis.
+    `;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.3,
+    });
+
+    const text = completion.choices[0].message.content;
+
+    const jsonStart = text.indexOf("{");
+    const jsonEnd = text.lastIndexOf("}");
+    const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+
+    res.json(parsed);
+  } catch (error) {
+    console.error("Analysis error:", error);
+    res.status(500).json({ error: "Gagal melakukan analisis AI" });
+  }
+});
+
+/* ========================= */
+app.listen(port, () => {
+  console.log(`Backend berjalan di port ${port}`);
 });
