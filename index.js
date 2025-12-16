@@ -1,106 +1,102 @@
 import express from "express";
 import cors from "cors";
-import fetch from "node-fetch";
+import dotenv from "dotenv";
+import OpenAI from "openai";
+
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// =======================
-// MIDDLEWARE
-// =======================
-app.use(cors());
-app.use(express.json());
+/* ===============================
+   MIDDLEWARE (WAJIB URUTAN INI)
+================================ */
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type"]
+}));
 
-// =======================
-// HEALTH CHECK
-// =======================
-app.get("/", (req, res) => {
-  res.send("Backend AI Validasi Ide Aktif");
+app.use(express.json({ limit: "1mb" }));
+
+/* ===============================
+   OPENAI CLIENT
+================================ */
+if (!process.env.OPENAI_API_KEY) {
+  console.error("❌ OPENAI_API_KEY TIDAK ADA");
+}
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
 });
 
-// =======================
-// ANALYZE ENDPOINT (FINAL)
-// =======================
+/* ===============================
+   HEALTH CHECK
+================================ */
+app.get("/", (req, res) => {
+  res.json({
+    status: "OK",
+    message: "Backend AI Validasi Ide aktif"
+  });
+});
+
+/* ===============================
+   ANALYZE ENDPOINT (INI YANG DIPAKAI FRONTEND)
+================================ */
 app.post("/api/analyze", async (req, res) => {
   try {
-    const { idea, approvedSummary, approvedProblems, approvedTarget } = req.body;
+    const { idea } = req.body;
 
-    if (!idea) {
-      return res.status(400).json({ error: "Idea is required" });
+    if (!idea || idea.trim().length < 10) {
+      return res.status(400).json({
+        error: "Ide bisnis terlalu pendek"
+      });
     }
 
-    // =======================
-    // PROMPT BERJENJANG + CTA
-    // =======================
     const prompt = `
-Anda adalah konsultan bisnis UMKM Indonesia yang sangat kritis dan praktis.
+Anda adalah konsultan bisnis UMKM Indonesia.
 
-Gunakan informasi berikut:
+Analisis ide bisnis berikut secara mendalam dan praktis:
 
-IDE AWAL:
-${idea}
+"${idea}"
 
-${approvedSummary ? `RINGKASAN IDE DISETUJUI USER:\n${approvedSummary}` : ""}
-${approvedProblems ? `MASALAH YANG DISETUJUI USER:\n${approvedProblems}` : ""}
-${approvedTarget ? `TARGET PASAR DISETUJUI USER:\n${approvedTarget}` : ""}
+Gunakan struktur berikut:
 
-Tugas Anda:
-
-1. Ringkasan Ide (jelas, 3–4 kalimat)
-2. Masalah Utama yang Diselesaikan (bullet points)
-3. Target Pasar Spesifik (siapa, daya beli, perilaku)
+1. Ringkasan Ide
+2. Masalah yang Diselesaikan
+3. Target Pasar
 4. Keunggulan & Diferensiasi
-5. Risiko & Tantangan Nyata
-6. Validasi Cepat (MVP 14–30 hari)
-7. Rekomendasi Aksi Nyata (Call To Action):
-   - Langkah 7 hari
-   - Langkah 30 hari
-   - Indikator lanjut / berhenti
+5. Risiko Utama
+6. Validasi Cepat (MVP)
+7. Rekomendasi Aksi Nyata (Call To Action)
 
-Gunakan bahasa Indonesia yang lugas, bukan teori.
+Gunakan bahasa Indonesia yang jelas, lugas, dan aplikatif.
 `;
 
-    // =======================
-    // CALL OPENAI API
-    // =======================
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: "Anda adalah analis bisnis UMKM." },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.7,
-      }),
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "Anda adalah konsultan bisnis berpengalaman." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.7
     });
 
-    const data = await response.json();
+    const result = completion.choices[0].message.content;
 
-    if (!data.choices || !data.choices[0]) {
-      throw new Error("No response from OpenAI");
-    }
-
-    res.json({
-      result: data.choices[0].message.content,
-    });
+    return res.json({ result });
 
   } catch (error) {
-    console.error("ERROR ANALYZE:", error);
-    res.status(500).json({
-      error: "Gagal memproses analisis",
-      detail: error.message,
+    console.error("❌ ERROR ANALYZE:", error.message);
+    return res.status(500).json({
+      error: "Gagal memproses analisis AI"
     });
   }
 });
 
-// =======================
-// START SERVER
-// =======================
+/* ===============================
+   START SERVER
+================================ */
 app.listen(PORT, () => {
-  console.log(`Backend running on port ${PORT}`);
+  console.log(`🚀 Backend running on port ${PORT}`);
 });
