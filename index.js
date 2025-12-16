@@ -6,101 +6,98 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
 });
 
-/**
- * STEP 1: Generate Draft (Ringkasan, Masalah, Target)
- */
-app.post("/draft", async (req, res) => {
+// ===== HEALTH CHECK =====
+app.get("/", (req, res) => {
+  res.send("Backend AI Validasi Ide UMKM aktif");
+});
+
+// ===== ANALISIS AWAL =====
+app.post("/api/analyze-initial", async (req, res) => {
   try {
-    const { idea, location, target, price } = req.body;
+    const { idea } = req.body;
 
     const prompt = `
-Anda adalah analis bisnis UMKM Indonesia.
+Anda adalah konsultan bisnis UMKM Indonesia.
 
-Buatkan DRAFT AWAL dalam format JSON dengan struktur:
-{
-  "ringkasan_ide": "...",
-  "masalah_yang_disediakan": "...",
-  "target_pasar": "..."
-}
+Berdasarkan ide bisnis berikut:
+"${idea}"
 
-Ide Bisnis:
-- Ide: ${idea}
-- Lokasi: ${location}
-- Target awal: ${target}
-- Harga: ${price}
+Buatkan:
+1. Ringkasan Ide (singkat & jelas)
+2. Masalah yang Diselesaikan
+3. Target Pasar
 
-Gunakan bahasa lugas dan mudah dipahami UMKM.
+Gunakan format:
+### Ringkasan Ide
+### Masalah yang Diselesaikan
+### Target Pasar
 `;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.4,
+      temperature: 0.4
     });
 
-    const text = completion.choices[0].message.content;
-    res.json({ draft: text });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Gagal membuat draft" });
+    res.json({
+      result: completion.choices[0].message.content
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Gagal analisis awal" });
   }
 });
 
-/**
- * STEP 2: Final Analysis (SETELAH DISETUJUI USER)
- */
-app.post("/analyze-final", async (req, res) => {
+// ===== ANALISIS FINAL SETELAH PERSETUJUAN =====
+app.post("/api/analyze-final", async (req, res) => {
   try {
-    const { ringkasan, masalah, target } = req.body;
+    const { summary, problem, target } = req.body;
 
     const prompt = `
-Anda adalah konsultan bisnis UMKM senior.
+Anda adalah konsultan bisnis UMKM Indonesia.
 
-Lakukan ANALISA MENDALAM berdasarkan poin yang SUDAH DISETUJUI user berikut:
+Gunakan data yang TELAH DISETUJUI user berikut:
 
 Ringkasan Ide:
-${ringkasan}
+${summary}
 
 Masalah yang Diselesaikan:
-${masalah}
+${problem}
 
 Target Pasar:
 ${target}
 
-Berikan:
-1. Analisis pasar
-2. Analisis kompetitor
-3. Risiko utama
-4. Rekomendasi aksi
-5. Call To Action (apa langkah berikutnya)
+Buatkan analisis lanjutan:
+1. Keunggulan & Diferensiasi
+2. Risiko & Tantangan
+3. Validasi Cepat (MVP)
+4. Rekomendasi Aksi Nyata (Call to Action 7 hari ke depan)
 
-Gunakan bahasa lugas, jujur, dan praktis.
+Gunakan bahasa lugas & aplikatif.
 `;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.5,
+      temperature: 0.4
     });
 
     res.json({
-      analysis: completion.choices[0].message.content,
+      result: completion.choices[0].message.content
     });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Gagal analisa final" });
-  }
-});
 
-app.get("/", (req, res) => {
-  res.send("Backend Approval Flow Aktif");
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Gagal analisis final" });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("Backend running on port", PORT);
+  console.log("Backend berjalan di port", PORT);
 });
