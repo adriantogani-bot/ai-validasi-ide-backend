@@ -2,97 +2,82 @@ import express from "express";
 import cors from "cors";
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
-/* =========================
-   MIDDLEWARE WAJIB
-========================= */
+/* ================= MIDDLEWARE ================= */
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-/* =========================
-   HEALTH CHECK
-========================= */
+/* ================= HEALTH CHECK ================= */
 app.get("/", (req, res) => {
-  res.json({ status: "OK", message: "Backend is running" });
+  res.json({ status: "Backend OK" });
 });
 
-/* =========================
-   ANALYZE INITIAL
-========================= */
+/* ================= ANALYZE INITIAL ================= */
 app.post("/api/analyze-initial", async (req, res) => {
   try {
-    console.log("=== ANALYZE INITIAL ===");
-    console.log("BODY:", req.body);
+    const { idea } = req.body;
 
-    const { idea } = req.body || {};
-
-    if (!idea || idea.trim() === "") {
-      return res.status(400).json({ error: "Idea is required" });
+    if (!idea || typeof idea !== "string") {
+      return res.status(400).json({ error: "Idea tidak valid" });
     }
 
-    // SIMULASI AI (AMAN)
-    const result = {
-      ringkasan:
-        "Ringkasan awal dari ide bisnis: " + idea,
-      masalah:
-        "Masalah utama yang ingin diselesaikan dari ide ini.",
-      target:
-        "Target pasar utama yang paling relevan."
-    };
+    // SIMULASI ANALISIS AWAL (AMAN)
+    const ringkasan = `Ringkasan awal dari ide bisnis: ${idea}`;
+    const masalah = "Masalah utama yang ingin diselesaikan dari ide ini.";
+    const target_pasar = "Target pasar utama yang paling relevan.";
 
-    res.json(result);
+    res.json({
+      ringkasan,
+      masalah,
+      target_pasar
+    });
+
   } catch (err) {
     console.error("INITIAL ERROR:", err);
     res.status(500).json({ error: "Analyze initial failed" });
   }
 });
 
-/* =========================
-   ANALYZE FINAL (SETUJU)
-========================= */
+/* ================= ANALYZE FINAL ================= */
 app.post("/api/analyze-final", async (req, res) => {
   try {
-    console.log("=== ANALYZE FINAL ===");
-    console.log("BODY:", req.body);
+    const { ringkasan, masalah, target_pasar } = req.body;
 
-    const {
-      ringkasan,
-      masalah,
-      target
-    } = req.body || {};
-
-    if (!ringkasan || !masalah || !target) {
-      return res.status(400).json({
-        error: "Approved data incomplete"
-      });
+    if (!ringkasan || !masalah || !target_pasar) {
+      return res.status(400).json({ error: "Data approval tidak lengkap" });
     }
 
-    // SIMULASI ANALISIS FINAL
-    const finalResult = {
-      analisis:
-        "Analisis kelayakan mendalam berdasarkan persetujuan user.",
-      risiko:
-        "Risiko utama dan tantangan bisnis.",
-      rekomendasi:
-        [
-          "Uji pasar skala kecil",
-          "Validasi harga",
-          "Bangun diferensiasi",
-          "Hitung ulang margin"
-        ]
-    };
+    const finalAnalysis = `
+### Analisis Kelayakan Final
 
-    res.json(finalResult);
+**Ringkasan Ide**
+${ringkasan}
+
+**Masalah Utama**
+${masalah}
+
+**Target Pasar**
+${target_pasar}
+
+### Rekomendasi Aksi Nyata
+1. Validasi permintaan pasar dengan pre-order
+2. Uji harga dan margin secara bertahap
+3. Gunakan channel komunitas sebagai distribusi awal
+4. Hindari investasi besar sebelum PMF tercapai
+    `.trim();
+
+    res.json({
+      final_analysis: finalAnalysis
+    });
+
   } catch (err) {
     console.error("FINAL ERROR:", err);
     res.status(500).json({ error: "Analyze final failed" });
   }
 });
 
-/* =========================
-   START SERVER
-========================= */
-const PORT = process.env.PORT || 3000;
+/* ================= START SERVER ================= */
 app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
+  console.log(`Backend running on port ${PORT}`);
 });
