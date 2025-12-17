@@ -1,181 +1,187 @@
 import express from "express";
 import cors from "cors";
-import OpenAI from "openai";
+import fetch from "node-fetch";
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
 app.use(cors());
 app.use(express.json());
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-/* ===============================
-   PROMPT SYSTEM (GLOBAL)
-================================ */
-const SYSTEM_PROMPT = `
-You are a senior venture capital analyst with 15+ years experience.
-You analyze early-stage business ideas realistically.
-You avoid motivational language.
-You base analysis strictly on provided input.
-You speak clearly, directly, and analytically.
-`;
+/* =========================
+   PROMPT DEFINITIONS
+========================= */
 
-/* ===============================
-   ANALISIS AWAL PROMPT
-================================ */
-function promptInitial({ idea, location, target, price }) {
+function promptInitial(idea) {
   return `
-Analyze the following early-stage business idea.
+Anda adalah analis bisnis UMKM yang sangat praktis.
 
-Business Idea:
-${idea}
+TUGAS:
+Ubah ide bisnis berikut menjadi 3 komponen WAJIB:
+1. Ringkasan Ide (spesifik, 3–5 kalimat)
+2. Masalah Nyata yang Diselesaikan (jelas, konkret)
+3. Target Pasar Spesifik (siapa, konteks, perilaku)
 
-Target Location:
-${location}
+IDE BISNIS:
+"${idea}"
 
-Target Customer:
-${target}
+ATURAN:
+- Jangan normatif
+- Jangan abstrak
+- Jangan mengulang kata "ide bisnis ini"
+- Fokus pada konteks nyata Indonesia
 
-Price Range:
-${price}
-
-Your task:
-1. Rewrite the idea into a clear and concise Business Summary.
-2. Identify the CORE problem this business claims to solve.
-3. Define the REALISTIC target market segment.
-
-Rules:
-- Base everything ONLY on the input above.
-- Do not generalize.
-- No advice yet.
-- Output in clear bullet points.
-
-Output format:
-
-Business Summary:
-- ...
-
-Problem Being Solved:
-- ...
-
-Target Market:
-- ...
+FORMAT OUTPUT (WAJIB JSON VALID):
+{
+  "ringkasan": "...",
+  "masalah": "...",
+  "target_pasar": "..."
+}
 `;
 }
 
-/* ===============================
-   ANALISIS FINAL (VC STYLE)
-================================ */
-function promptFinal({ approvedSummary, approvedProblem, approvedTarget }) {
+function promptFinal({ ringkasan, masalah, target_pasar }) {
   return `
-Using ONLY the approved inputs below, perform a venture-capital–style evaluation.
+Anda adalah konsultan Venture Capital tahap awal (Seed – Series A).
 
-Approved Business Summary:
-${approvedSummary}
+Lakukan ANALISIS FINAL terhadap bisnis berikut.
 
-Approved Problem:
-${approvedProblem}
+DATA BISNIS:
+Ringkasan:
+${ringkasan}
 
-Approved Target Market:
-${approvedTarget}
+Masalah:
+${masalah}
 
-Tasks:
+Target Pasar:
+${target_pasar}
 
-1. Market Attractiveness Analysis
-- Market size logic (qualitative)
-- Demand realism
-- Market urgency
-
+TUGAS ANALISIS:
+1. Penilaian Kelayakan Bisnis (nyata / tidak)
 2. Competitive Comparative Analysis
-- Closest comparable business types
-- Key differentiation gaps
-- Likelihood of direct competition
+   - Bandingkan dengan MINIMAL 2 model bisnis serupa
+3. Risiko Utama (operasional, pasar, finansial)
+4. Potensi Monetisasi (bagaimana uang benar-benar masuk)
+5. Skor VC Style (0–100) berdasarkan:
+   - Market
+   - Problem Severity
+   - Differentiation
+   - Execution Feasibility
 
-3. Execution Risk Assessment
-- Operational risk
-- Go-to-market risk
-- Cost & pricing risk
+ATURAN KERAS:
+- Jangan normatif
+- Jangan generik
+- Jangan motivasional
+- Bahasa lugas, profesional
+- Anggap founder akan pakai ini untuk pitch deck
 
-4. VC-Style Scoring (0–10)
-- Market
-- Differentiation
-- Feasibility
-- Risk profile
-
-5. Strategic Recommendation
-- Proceed / Proceed with constraints / Do not proceed
-- Clear reasoning (not motivational)
-
-Rules:
-- No generic startup advice
-- No buzzwords
-- No assumptions beyond input
-- Be critical and honest
-
-Output clearly with headings.
+FORMAT OUTPUT (WAJIB JSON VALID):
+{
+  "final_analysis": {
+    "kelayakan": "...",
+    "comparative_analysis": "...",
+    "risiko": "...",
+    "monetisasi": "...",
+    "vc_score": {
+      "total": 0,
+      "market": 0,
+      "problem": 0,
+      "differentiation": 0,
+      "execution": 0
+    },
+    "kesimpulan": "..."
+  }
+}
 `;
 }
 
-/* ===============================
-   ROUTES
-================================ */
+/* =========================
+   HELPER: CALL OPENAI
+========================= */
+
+async function callOpenAI(prompt) {
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      temperature: 0.3,
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+
+  const data = await res.json();
+
+  if (!data.choices?.[0]?.message?.content) {
+    throw new Error("Empty AI response");
+  }
+
+  return data.choices[0].message.content;
+}
+
+/* =========================
+   ANALYZE INITIAL
+========================= */
 
 app.post("/api/analyze-initial", async (req, res) => {
   try {
-    const prompt = promptInitial(req.body);
+    const { idea } = req.body;
+    if (!idea) return res.status(400).json({ error: "Idea required" });
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.3,
-    });
+    const raw = await callOpenAI(promptInitial(idea));
 
-    res.json({
-      success: true,
-      result: response.choices[0].message.content,
-    });
+    const parsed = JSON.parse(raw);
+
+    if (!parsed.ringkasan || !parsed.masalah || !parsed.target_pasar) {
+      throw new Error("Incomplete initial analysis");
+    }
+
+    res.json(parsed);
+
   } catch (err) {
-    console.error("INITIAL ERROR:", err);
-    res.status(500).json({ success: false, message: "Initial analysis failed" });
+    console.error("INITIAL ERROR:", err.message);
+    res.status(500).json({ error: "Analyze initial failed" });
   }
 });
+
+/* =========================
+   ANALYZE FINAL
+========================= */
 
 app.post("/api/analyze-final", async (req, res) => {
   try {
-    const prompt = promptFinal(req.body);
+    const { ringkasan, masalah, target_pasar } = req.body;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.25,
-    });
+    if (!ringkasan || !masalah || !target_pasar) {
+      return res.status(400).json({ error: "Incomplete data" });
+    }
 
-    res.json({
-      success: true,
-      result: response.choices[0].message.content,
-    });
+    const raw = await callOpenAI(
+      promptFinal({ ringkasan, masalah, target_pasar })
+    );
+
+    const parsed = JSON.parse(raw);
+
+    if (!parsed.final_analysis) {
+      throw new Error("Final analysis missing");
+    }
+
+    res.json(parsed.final_analysis);
+
   } catch (err) {
-    console.error("FINAL ERROR:", err);
-    res.status(500).json({ success: false, message: "Final analysis failed" });
+    console.error("FINAL ERROR:", err.message);
+    res.status(500).json({ error: "Analyze final failed" });
   }
 });
 
-/* ===============================
-   HEALTH CHECK
-================================ */
-app.get("/", (req, res) => {
-  res.send("Backend is running");
-});
+/* =========================
+   SERVER
+========================= */
 
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Backend running on port ${PORT}`);
+  console.log("Backend running on port", PORT);
 });
