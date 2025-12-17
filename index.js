@@ -1,40 +1,51 @@
 import express from "express";
 import cors from "cors";
+import fetch from "node-fetch";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-/* ===============================
-   HEALTH CHECK
-================================ */
-app.get("/", (req, res) => {
-  res.send("Backend AI Validasi Ide UMKM OK");
-});
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-/* ===============================
-   ANALYZE INITIAL
-================================ */
+/* =========================
+   ANALISIS AWAL
+========================= */
 app.post("/api/analyze-initial", async (req, res) => {
   try {
     const { idea } = req.body;
+    if (!idea) return res.status(400).json({ error: "Idea is required" });
 
-    if (!idea || typeof idea !== "string") {
-      return res.status(400).json({ error: "Idea is required" });
-    }
+    const prompt = `
+Buat analisis awal ide bisnis UMKM berikut dalam format JSON:
+{
+  "ringkasan": "...",
+  "masalah": "...",
+  "target_pasar": "..."
+}
 
-    // ⛔️ JANGAN JSON.parse response AI
-    // Anggap AI mengembalikan TEKS BIASA
+Ide bisnis:
+${idea}
+`;
 
-    const ringkasan = `Ringkasan awal dari ide bisnis: ${idea}`;
-    const masalah = `Masalah utama yang ingin diselesaikan dari ide ini.`;
-    const target_pasar = `Target pasar utama yang paling relevan.`;
-
-    res.json({
-      ringkasan,
-      masalah,
-      target_pasar
+    const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.5
+      })
     });
+
+    const data = await aiRes.json();
+    const content = data.choices[0].message.content;
+    const json = JSON.parse(content);
+
+    res.json(json);
 
   } catch (err) {
     console.error("INITIAL ERROR:", err);
@@ -42,41 +53,58 @@ app.post("/api/analyze-initial", async (req, res) => {
   }
 });
 
-/* ===============================
-   ANALYZE FINAL
-================================ */
+/* =========================
+   ANALISIS FINAL (INI KUNCI)
+========================= */
 app.post("/api/analyze-final", async (req, res) => {
   try {
     const { ringkasan, masalah, target_pasar } = req.body;
 
     if (!ringkasan || !masalah || !target_pasar) {
-      return res.status(400).json({ error: "Data approval tidak lengkap" });
+      return res.status(400).json({ error: "Data tidak lengkap" });
     }
 
-    // ⛔️ JANGAN PARSE JSON DARI AI
-    const finalAnalysis = `
-KESIMPULAN KELAYAKAN BISNIS
+    const prompt = `
+Anda adalah konsultan bisnis UMKM senior.
 
-Ringkasan:
+Berdasarkan data yang SUDAH DISETUJUI pengguna berikut:
+
+Ringkasan Ide:
 ${ringkasan}
 
-Masalah:
+Masalah yang Diselesaikan:
 ${masalah}
 
 Target Pasar:
 ${target_pasar}
 
-REKOMENDASI AKSI:
-1. Uji pasar dengan skala kecil
-2. Validasi minat dengan pre-order
-3. Hitung ulang struktur biaya
-4. Fokus diferensiasi utama
+Berikan ANALISIS FINAL yang TAJAM dan PRAKTIS dengan struktur:
+
+1. Penilaian kelayakan bisnis (layak / tidak layak + alasan)
+2. Kekuatan utama ide ini
+3. Risiko utama yang perlu diwaspadai
+4. Rekomendasi aksi nyata 30 hari ke depan (bullet point)
+
+Gunakan bahasa tegas, konkret, dan spesifik UMKM Indonesia.
 `;
 
-    // ✅ WAJIB OBJECT JSON
-    res.json({
-      final_analysis: finalAnalysis.trim()
+    const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7
+      })
     });
+
+    const data = await aiRes.json();
+    const finalAnalysis = data.choices[0].message.content;
+
+    res.json({ final_analysis: finalAnalysis });
 
   } catch (err) {
     console.error("FINAL ERROR:", err);
@@ -84,10 +112,7 @@ REKOMENDASI AKSI:
   }
 });
 
-/* ===============================
-   START SERVER
-================================ */
+/* ========================= */
+app.get("/", (_, res) => res.send("Backend OK"));
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
-});
+app.listen(PORT, () => console.log("Server running on", PORT));
