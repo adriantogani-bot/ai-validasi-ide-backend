@@ -8,25 +8,29 @@ app.use(express.json());
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-/* =========================
-   ANALISIS AWAL
-========================= */
+/* ===============================
+   ANALYZE INITIAL
+================================ */
 app.post("/api/analyze-initial", async (req, res) => {
   try {
     const { idea } = req.body;
-    if (!idea) return res.status(400).json({ error: "Idea is required" });
+
+    if (!idea || idea.trim().length < 10) {
+      return res.status(400).json({ error: "Idea terlalu pendek" });
+    }
 
     const prompt = `
-Buat analisis awal ide bisnis UMKM berikut dalam format JSON:
-{
-  "ringkasan": "...",
-  "masalah": "...",
-  "target_pasar": "..."
-}
+Analisis singkat ide bisnis berikut untuk UMKM Indonesia.
 
-Ide bisnis:
+Ide:
 ${idea}
-`;
+
+Berikan hasil dalam TEKS BIASA (bukan JSON), dengan struktur:
+
+Ringkasan Ide:
+Masalah yang Diselesaikan:
+Target Pasar:
+    `.trim();
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -37,15 +41,19 @@ ${idea}
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
-        temperature: 0.5
+        temperature: 0.4
       })
     });
 
-    const data = await aiRes.json();
-    const content = data.choices[0].message.content;
-    const json = JSON.parse(content);
+    const aiData = await aiRes.json();
 
-    res.json(json);
+    const text =
+      aiData?.choices?.[0]?.message?.content ||
+      "AI tidak mengembalikan hasil";
+
+    res.json({
+      analysis_text: text
+    });
 
   } catch (err) {
     console.error("INITIAL ERROR:", err);
@@ -53,40 +61,30 @@ ${idea}
   }
 });
 
-/* =========================
-   ANALISIS FINAL (INI KUNCI)
-========================= */
+/* ===============================
+   ANALYZE FINAL
+================================ */
 app.post("/api/analyze-final", async (req, res) => {
   try {
     const { ringkasan, masalah, target_pasar } = req.body;
 
-    if (!ringkasan || !masalah || !target_pasar) {
-      return res.status(400).json({ error: "Data tidak lengkap" });
-    }
-
     const prompt = `
-Anda adalah konsultan bisnis UMKM senior.
+Buat analisis kelayakan bisnis UMKM berdasarkan data berikut:
 
-Berdasarkan data yang SUDAH DISETUJUI pengguna berikut:
-
-Ringkasan Ide:
+Ringkasan:
 ${ringkasan}
 
-Masalah yang Diselesaikan:
+Masalah:
 ${masalah}
 
 Target Pasar:
 ${target_pasar}
 
-Berikan ANALISIS FINAL yang TAJAM dan PRAKTIS dengan struktur:
-
-1. Penilaian kelayakan bisnis (layak / tidak layak + alasan)
-2. Kekuatan utama ide ini
-3. Risiko utama yang perlu diwaspadai
-4. Rekomendasi aksi nyata 30 hari ke depan (bullet point)
-
-Gunakan bahasa tegas, konkret, dan spesifik UMKM Indonesia.
-`;
+Berikan:
+1. Kesimpulan Kelayakan
+2. Risiko Utama
+3. Rekomendasi Aksi Nyata
+    `.trim();
 
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -97,14 +95,19 @@ Gunakan bahasa tegas, konkret, dan spesifik UMKM Indonesia.
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
-        temperature: 0.7
+        temperature: 0.4
       })
     });
 
-    const data = await aiRes.json();
-    const finalAnalysis = data.choices[0].message.content;
+    const aiData = await aiRes.json();
 
-    res.json({ final_analysis: finalAnalysis });
+    const text =
+      aiData?.choices?.[0]?.message?.content ||
+      "AI tidak mengembalikan hasil";
+
+    res.json({
+      final_analysis: text
+    });
 
   } catch (err) {
     console.error("FINAL ERROR:", err);
@@ -112,7 +115,14 @@ Gunakan bahasa tegas, konkret, dan spesifik UMKM Indonesia.
   }
 });
 
-/* ========================= */
-app.get("/", (_, res) => res.send("Backend OK"));
+/* ===============================
+   HEALTH CHECK
+================================ */
+app.get("/", (req, res) => {
+  res.send("AI Validasi Ide Backend OK");
+});
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Server running on", PORT));
+app.listen(PORT, () => {
+  console.log("Backend running on port", PORT);
+});
