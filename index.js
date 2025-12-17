@@ -3,92 +3,163 @@ import cors from "cors";
 import fetch from "node-fetch";
 
 const app = express();
-app.use(cors());
-app.use(express.json());
-
 const PORT = process.env.PORT || 3000;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-/* ===== DEBUG START ===== */
-console.log("ENV CHECK:", {
-  hasOpenAIKey: !!OPENAI_API_KEY,
+/* =========================
+   MIDDLEWARE (WAJIB URUTAN)
+========================= */
+app.use(cors());
+app.use(express.json({ limit: "1mb" })); // ⬅️ PENTING
+
+/* =========================
+   HEALTH CHECK
+========================= */
+app.get("/", (req, res) => {
+  res.json({
+    status: "OK",
+    message: "AI Validasi Ide Backend is running"
+  });
 });
-/* ===== DEBUG END ===== */
 
+/* =========================
+   ANALISIS AWAL (STEP 1)
+========================= */
 app.post("/api/analyze-initial", async (req, res) => {
   try {
+    console.log("REQUEST BODY:", req.body);
+
     const { idea } = req.body;
 
-    if (!idea) {
-      return res.status(400).json({ error: "Idea is required" });
+    if (!idea || typeof idea !== "string") {
+      return res.status(400).json({
+        error: "Field 'idea' wajib diisi dan harus string"
+      });
     }
-
-    console.log("Analyze initial called with idea:", idea);
 
     const prompt = `
 Anda adalah konsultan bisnis UMKM Indonesia.
 
-Tugas Anda:
-Buatkan 3 bagian berikut dalam format JSON MURNI:
+Tugas:
+Buatkan analisis awal ide bisnis berikut dengan format JSON:
 
 {
   "ringkasan": "...",
   "masalah": "...",
-  "target": "..."
+  "target_pasar": "..."
 }
 
-IDE BISNIS:
+Ide bisnis:
 ${idea}
 `;
 
-    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.7
-      })
-    });
+    const aiResponse = await fetch(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.4
+        })
+      }
+    );
 
-    const rawText = await openaiRes.text();
-    console.log("RAW OPENAI RESPONSE:", rawText);
+    const aiData = await aiResponse.json();
 
-    if (!openaiRes.ok) {
-      throw new Error("OpenAI API error");
+    if (!aiData.choices) {
+      console.error("AI RAW RESPONSE:", aiData);
+      return res.status(500).json({ error: "AI response invalid" });
     }
 
-    const parsed = JSON.parse(rawText);
-    const content = parsed.choices?.[0]?.message?.content;
+    const text = aiData.choices[0].message.content;
 
-    if (!content) {
-      throw new Error("Empty AI response");
+    // AMAN: ambil JSON saja
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return res.status(500).json({ error: "JSON tidak ditemukan di response AI" });
     }
 
-    const jsonStart = content.indexOf("{");
-    const jsonEnd = content.lastIndexOf("}");
-    const jsonString = content.slice(jsonStart, jsonEnd + 1);
+    const parsed = JSON.parse(jsonMatch[0]);
 
-    const result = JSON.parse(jsonString);
-
-    return res.json(result);
+    res.json(parsed);
 
   } catch (err) {
-    console.error("ANALYZE INITIAL ERROR:", err);
-    return res.status(500).json({
-      error: "Analyze initial failed",
-      detail: err.message
-    });
+    console.error("INITIAL ERROR:", err);
+    res.status(500).json({ error: "Analyze initial failed" });
   }
 });
 
-app.get("/", (req, res) => {
-  res.send("Backend is running");
+/* =========================
+   ANALISIS FINAL (STEP 2)
+========================= */
+app.post("/api/analyze-final", async (req, res) => {
+  try {
+    const { ringkasan, masalah, target_pasar } = req.body;
+
+    if (!ringkasan || !masalah || !target_pasar) {
+      return res.status(400).json({ error: "Data approval tidak lengkap" });
+    }
+
+    const prompt = `
+Anda adalah konsultan bisnis senior.
+
+Gunakan data berikut untuk analisis lanjutan + rekomendasi aksi:
+
+Ringkasan:
+${ringkasan}
+
+Masalah:
+${masalah}
+
+Target Pasar:
+${target_pasar}
+
+Berikan:
+1. Kelayakan bisnis
+2. Risiko utama
+3. Rekomendasi aksi 30 hari
+4. Call To Action konkret
+`;
+
+    const aiResponse = await fetch(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.5
+        })
+      }
+    );
+
+    const aiData = await aiResponse.json();
+
+    if (!aiData.choices) {
+      return res.status(500).json({ error: "AI error" });
+    }
+
+    res.json({
+      result: aiData.choices[0].message.content
+    });
+
+  } catch (err) {
+    console.error("FINAL ERROR:", err);
+    res.status(500).json({ error: "Analyze final failed" });
+  }
 });
 
+/* =========================
+   START SERVER
+========================= */
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Backend running on port ${PORT}`);
 });
