@@ -2,35 +2,34 @@ import express from "express";
 import cors from "cors";
 
 const app = express();
+app.use(cors());
+app.use(express.json());
+
 const PORT = process.env.PORT || 3000;
 
-/* ================= MIDDLEWARE ================= */
-app.use(cors());
-app.use(express.json({ limit: "1mb" }));
-
-/* ================= HEALTH CHECK ================= */
+/* =========================
+   HEALTH CHECK
+========================= */
 app.get("/", (req, res) => {
   res.json({ status: "Backend OK" });
 });
 
-/* ================= ANALYZE INITIAL ================= */
+/* =========================
+   ANALYSIS INITIAL
+========================= */
 app.post("/api/analyze-initial", async (req, res) => {
   try {
     const { idea } = req.body;
 
-    if (!idea || typeof idea !== "string") {
-      return res.status(400).json({ error: "Idea tidak valid" });
+    if (!idea) {
+      return res.status(400).json({ error: "Idea is required" });
     }
 
-    // SIMULASI ANALISIS AWAL (AMAN)
-    const ringkasan = `Ringkasan awal dari ide bisnis: ${idea}`;
-    const masalah = "Masalah utama yang ingin diselesaikan dari ide ini.";
-    const target_pasar = "Target pasar utama yang paling relevan.";
-
+    // ⬇️ SIMULASI HASIL AI (AMAN & STABIL)
     res.json({
-      ringkasan,
-      masalah,
-      target_pasar
+      ringkasan: `Ringkasan awal dari ide bisnis: ${idea}`,
+      masalah: "Masalah utama yang ingin diselesaikan dari ide ini.",
+      target_pasar: "Target pasar utama yang paling relevan."
     });
 
   } catch (err) {
@@ -39,34 +38,34 @@ app.post("/api/analyze-initial", async (req, res) => {
   }
 });
 
-/* ================= ANALYZE FINAL ================= */
+/* =========================
+   ANALYSIS FINAL
+========================= */
 app.post("/api/analyze-final", async (req, res) => {
   try {
     const { ringkasan, masalah, target_pasar } = req.body;
 
     if (!ringkasan || !masalah || !target_pasar) {
-      return res.status(400).json({ error: "Data approval tidak lengkap" });
+      return res.status(400).json({ error: "Incomplete approval data" });
     }
 
     const finalAnalysis = `
-### Analisis Kelayakan Final
+ANALISIS FINAL KELAYAKAN BISNIS
 
-**Ringkasan Ide**
+1. Ringkasan:
 ${ringkasan}
 
-**Masalah Utama**
+2. Masalah:
 ${masalah}
 
-**Target Pasar**
+3. Target Pasar:
 ${target_pasar}
 
-### Rekomendasi Aksi Nyata
-1. Validasi permintaan pasar dengan pre-order
-2. Uji harga dan margin secara bertahap
-3. Gunakan channel komunitas sebagai distribusi awal
-4. Hindari investasi besar sebelum PMF tercapai
-    `.trim();
+KESIMPULAN:
+Ide bisnis ini layak diuji melalui MVP skala kecil sebelum ekspansi lebih lanjut.
+`;
 
+    // ⬅️ PENTING: field harus sama dengan frontend
     res.json({
       final_analysis: finalAnalysis
     });
@@ -77,7 +76,6 @@ ${target_pasar}
   }
 });
 
-/* ================= START SERVER ================= */
 app.listen(PORT, () => {
-  console.log(`Backend running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
