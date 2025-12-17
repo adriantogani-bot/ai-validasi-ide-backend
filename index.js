@@ -18,6 +18,7 @@ app.get("/", (req, res) => {
 
 /* ===== endpoint utama ===== */
 app.post("/api/analyze", async (req, res) => {
+console.log("BODY:", req.body);
   try {
     const { idea } = req.body;
     if (!idea) {

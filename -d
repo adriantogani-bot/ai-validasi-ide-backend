@@ -1,0 +1,15 @@
+HTTP/2 400 
+date: Tue, 16 Dec 2025 18:43:38 GMT
+content-type: application/json; charset=utf-8
+cf-ray: 9af053d75cd2c1f2-SIN
+access-control-allow-origin: *
+etag: W/"1c-TDmhzSiDXYLLPpThojGQqFpMC9U"
+rndr-id: b4b25a1a-abfb-4a4d
+vary: Accept-Encoding
+x-powered-by: Express
+x-render-origin-server: Render
+cf-cache-status: DYNAMIC
+server: cloudflare
+alt-svc: h3=":443"; ma=86400
+
+{"error":"Idea is required"}
